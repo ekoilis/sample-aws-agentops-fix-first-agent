@@ -1,8 +1,13 @@
 # A/B Testing with Amazon Bedrock AgentCore
 
-This project demonstrates how to run **target-based A/B tests** using Amazon Bedrock AgentCore. You deploy two agent variants, split live traffic between them via the AgentCore Gateway, and use automated online evaluation to determine which performs better with statistical significance.
+This workshop demonstrates two patterns for running **A/B tests** using Amazon Bedrock AgentCore. You split live traffic between agent variants via the AgentCore Gateway and use automated online evaluation to determine which performs better with statistical significance.
 
-## Architecture
+| Lab | Pattern | What varies | Infra |
+|-----|---------|-------------|-------|
+| **Lab 1** | Target-based | Two separate runtimes (different models/prompts) | 2 runtimes, 2 targets |
+| **Lab 2** | Configuration-based | Single runtime, config bundles swap the prompt | 1 runtime, 1 target, 2 config bundles |
+
+## Architecture — Lab 1: Target-Based
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -39,8 +44,47 @@ This project demonstrates how to run **target-based A/B tests** using Amazon Bed
               ┌─────────────┴───────────────┐
               │   A/B Test Aggregation      │
               │   mean, p-value, CI,        │
-              │   significance,             |
-              |   recommendation            │
+              │   significance,             │
+              │   recommendation            │
+              └─────────────────────────────┘
+```
+
+## Architecture — Lab 2: Configuration-Based
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  AgentCore Gateway (IAM Auth)                   │
+│                                                                 │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │            A/B Test (50/50 traffic split)               │   │
+│   │  Variant C  → configBundle: control-bundle v1          │   │
+│   │  Variant T1 → configBundle: treatment-bundle v1        │   │
+│   └────────────────────────┬────────────────────────────────┘   │
+└────────────────────────────┼────────────────────────────────────┘
+                             │
+                  ┌──────────┴──────────┐
+                  │  Target: fixfirst   │
+                  └──────────┬──────────┘
+                             │
+                  ┌──────────┴──────────┐
+                  │  AgentCore Runtime  │
+                  │  (single agent)     │
+                  │  reads config bundle│
+                  │  at invocation time │
+                  └──────────┬──────────┘
+                             │
+                        OTel spans
+                             │
+                  ┌──────────┴──────────┐
+                  │  Online Evaluation  │
+                  │  Builtin.Helpfulness│
+                  └──────────┬──────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              │   A/B Test Aggregation      │
+              │   mean, p-value, CI,        │
+              │   significance,             │
+              │   recommendation            │
               └─────────────────────────────┘
 ```
 
@@ -48,7 +92,7 @@ This project demonstrates how to run **target-based A/B tests** using Amazon Bed
 
 1. **Client sends request** → Gateway receives it with SigV4 auth
 2. **A/B test assigns variant** → based on session ID (sticky: same session always goes to same variant)
-3. **Gateway routes to target** → either `control` or `treatment` runtime
+3. **Gateway routes to target** → In Lab 1, routes to one of two runtimes; in Lab 2, routes to a single runtime with a config bundle attached
 4. **Runtime processes request** → generates OTel spans with baggage headers (experiment ARN + variant name)
 5. **Session completes** → after 15 min idle timeout
 6. **Online evaluator scores session** → `Builtin.Helpfulness` LLM judge rates each response
@@ -57,6 +101,8 @@ This project demonstrates how to run **target-based A/B tests** using Amazon Bed
 
 ## Use Case: FixFirst Appliance Support Agent
 
+### Lab 1 — Target-Based (different models)
+
 | | Control (C) | Treatment (T1) |
 |---|---|---|
 | **Model** | Amazon Nova Lite | Claude Sonnet 4.5 |
@@ -64,48 +110,76 @@ This project demonstrates how to run **target-based A/B tests** using Amazon Bed
 | **Cost** | Lower | Higher |
 | **Hypothesis** | Friendly but may lack depth | Structured approach = more helpful |
 
-**Expected outcome:** Treatment scores higher on helpfulness. If statistically significant (p < 0.05), we justify the higher cost of Claude for production.
+### Lab 2 — Configuration-Based (same model, different prompts)
+
+| | Control (C) | Treatment (T1) |
+|---|---|---|
+| **Model** | Claude Sonnet 4.5 | Claude Sonnet 4.5 |
+| **Prompt** | Conversational (default) | Structured IDENTIFY/DIAGNOSE/RESOLVE |
+| **Runtime** | Single shared runtime | Single shared runtime |
+| **Hypothesis** | Same model, better prompt = more helpful |
+
+**Expected outcome:** Treatment scores higher on helpfulness. If statistically significant (p < 0.05), we have data to justify the change in production.
 
 ## Quick Start
 
-**Notebook**
+**Lab 1 — Target-Based (notebook):**
 ```bash
 cd ab_testing
-jupyter notebook ab_testing.ipynb
+jupyter notebook lab1_ab_testing_targets.ipynb
 ```
 
-**End-to-end script (no notebook):**
+**Lab 2 — Configuration-Based (notebook):**
 ```bash
-./run_target_ab_testing.sh
+cd ab_testing
+jupyter notebook lab2_ab_testing_config_bundle.ipynb
+```
+
+**End-to-end scripts (no notebook):**
+```bash
+./run_target_ab_testing.sh        # Lab 1
+./run_config_ab_testing.sh        # Lab 2
 ```
 
 ## Project Structure
 
 ```
 ab_testing/
-├── ab_testing.ipynb                    # Bash notebook (Linux/macOS)
-├── run_target_ab_testing.sh            # End-to-end script (Linux/macOS)
+├── lab1_ab_testing_targets.ipynb       # Lab 1 notebook (Bash kernel, Linux/macOS)
+├── lab2_ab_testing_config_bundle.ipynb  # Lab 2 notebook (Bash kernel, Linux/macOS)
+├── run_target_ab_testing.sh            # Lab 1 end-to-end script
+├── run_config_ab_testing.sh            # Lab 2 end-to-end script
 ├── prompts.txt                         # 20 appliance troubleshooting prompts
-├── scripts/                            # Shared scripts
+├── README.md
+├── scripts/                            # Shared scripts (both labs)
 │   ├── check_prerequisites.sh
-│   ├── check_ab_results.py
+│   ├── check_ab_results.py             # Pretty-prints A/B test results
 │   ├── send_traffic.sh
 │   └── send_traffic.py                 # SigV4 signing for gateway requests
-├── target_based_variants/
+├── target_based_variants/              # Lab 1: two runtimes, two targets
 │   ├── agents/
 │   │   ├── control/                    # Nova Lite agent
-│   │   └── treatment/                  # Claude 4.5 agent
+│   │   └── treatment/                  # Claude Sonnet 4.5 agent
 │   ├── cdk_ab_testing/                 # CDK: runtimes + eval configs
 │   ├── cdk_ab_gateway/                 # CDK: gateway + targets + A/B test
-│   └── scripts/                        # Deploy/cleanup scripts
+│   └── scripts/
 │       ├── package_agents.sh
 │       ├── deploy_agents.sh
 │       ├── deploy_all.sh
 │       ├── deploy_testing_infra.sh
-│       ├── create_ab_test.py           # Called by ILocalBundling during CDK deploy
+│       ├── create_ab_test.py
 │       ├── cleanup_ab_test.py
 │       └── cleanup_all.sh
-└── configuration_based_variants/       # Future: config bundle A/B testing
+├── configuration_based_variants/       # Lab 2: single runtime, config bundles
+│   ├── agent/src/main.py              # Agent with BeforeModelCallEvent hook
+│   ├── cdk/                            # CDK: one runtime + shared eval config
+│   └── scripts/
+│       ├── package_config_agent.sh
+│       ├── deploy_config_agent.sh
+│       ├── create_config_ab_test.py    # Creates bundles + gateway + A/B test
+│       ├── cleanup_config_ab_test.py
+│       └── cleanup_config_all.sh
+└── win/                                # Windows notebooks + .bat scripts
 ```
 
 ## Interpreting Results

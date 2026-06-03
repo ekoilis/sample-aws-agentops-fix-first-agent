@@ -4,6 +4,8 @@
 # Auto-fixes what it can (uv, CDK bootstrap, pip packages).
 # Exit code: 0 if all prerequisites are met, 1 otherwise.
 
+cd ~/sample-aws-agentops-fix-first-agent/ab_testing
+
 set -o pipefail
 
 ALL_OK=true

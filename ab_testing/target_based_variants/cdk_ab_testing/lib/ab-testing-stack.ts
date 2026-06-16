@@ -26,8 +26,8 @@ export class ABTestingStack extends cdk.Stack {
 
         const region = cdk.Stack.of(this).region;
         const accountId = cdk.Stack.of(this).account;
-        const controlAgentName = 'fixFirstAgent_Agent';
-        const refinedAgentName = 'fixFirstAgentRefined_Agent';
+        const controlAgentName = 'fixFirstAgent_Control_Agent';
+        const refinedAgentName = 'fixFirstAgent_Treatment_Agent';
 
         /*****************************
         * Shared IAM policy statements for runtimes

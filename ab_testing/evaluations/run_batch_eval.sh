@@ -4,6 +4,13 @@
 
 set -euo pipefail
 
+# Ensure AWS CLI supports bedrock-agentcore batch evaluation
+if ! aws bedrock-agentcore start-batch-evaluation help >/dev/null 2>&1; then
+    echo "AWS CLI does not support 'bedrock-agentcore start-batch-evaluation'. Upgrading..."
+    pip install --quiet --upgrade awscli
+    hash -r
+fi
+
 REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo us-east-1)}"
 RUNTIME_ARN=$(aws ssm get-parameter --name /fixFirstAgent/agentcore-runtime-arn --query Parameter.Value --output text --region "$REGION")
 RUNTIME_ID=$(echo "$RUNTIME_ARN" | awk -F/ '{print $NF}')

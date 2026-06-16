@@ -59,17 +59,20 @@ if aws --version >/dev/null 2>&1; then
         echo "[OK] AWS CLI: $CLI_VER"
     else
         echo "[FIXING] AWS CLI $CLI_VER is too old. Need >= 2.34. Updating..."
-        curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
-            && unzip -qo /tmp/awscliv2.zip -d /tmp \
-            && sudo /tmp/aws/install --update >/dev/null 2>&1 \
-            && rm -rf /tmp/awscliv2.zip /tmp/aws
+        pip install --quiet --upgrade awscli 2>/dev/null || pip3 install --quiet --upgrade awscli 2>/dev/null || (
+            curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+                && unzip -qo /tmp/awscliv2.zip -d /tmp \
+                && sudo /tmp/aws/install --update >/dev/null 2>&1 \
+                && rm -rf /tmp/awscliv2.zip /tmp/aws
+        )
+        hash -r 2>/dev/null
         CLI_VER=$(aws --version 2>&1 | awk '{print $1}' | cut -d/ -f2)
         CLI_MINOR=$(echo "$CLI_VER" | cut -d. -f2)
         if [ "$CLI_MINOR" -ge 34 ] 2>/dev/null; then
             echo "[OK] AWS CLI updated to $CLI_VER"
         else
             echo "[FAIL] AWS CLI update failed. Current: $CLI_VER"
-            echo "   ACTION REQUIRED: Update manually from https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+            echo "   ACTION REQUIRED: Run 'pip install --upgrade awscli' or update manually"
             ALL_OK=false
         fi
     fi

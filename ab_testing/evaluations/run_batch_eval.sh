@@ -4,11 +4,16 @@
 
 set -euo pipefail
 
-# Ensure AWS CLI supports bedrock-agentcore batch evaluation
+# Ensure AWS CLI v2 supports bedrock-agentcore batch evaluation
 if ! aws bedrock-agentcore start-batch-evaluation help >/dev/null 2>&1; then
-    echo "AWS CLI does not support 'bedrock-agentcore start-batch-evaluation'. Upgrading..."
-    pip install --quiet --upgrade awscli
-    hash -r
+    echo "AWS CLI does not support 'bedrock-agentcore start-batch-evaluation'. Upgrading to v2..."
+    pip uninstall -y awscli 2>/dev/null
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+        && unzip -qo /tmp/awscliv2.zip -d /tmp \
+        && (/tmp/aws/install --update 2>/dev/null || /tmp/aws/install -i ~/aws-cli -b ~/bin 2>/dev/null) \
+        && rm -rf /tmp/awscliv2.zip /tmp/aws
+    export PATH=~/bin:$PATH
+    hash -r 2>/dev/null
 fi
 
 REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo us-east-1)}"
